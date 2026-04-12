@@ -1,153 +1,144 @@
-# Laporan Resmi Praktikum Sistem Operasi
-## Modul 2 - Proses dan Daemon
+# SISOP-2-2026-IT-085
 
-| Nama | Marvelino Davas |
-|------|-----------------|
-| NRP | 5027241085 |
-| Kelas | IT |
+Pengerjaan Praktikum Sistem Operasi Modul 2
+
+- [Soal 1 - Kasbon Warga Kampung Durian Runtuh](#soal-1---kasbon-warga-kampung-durian-runtuh)
+- [Soal 2 - The world never stops, even when you feel tired](#soal-2---the-world-never-stops-even-when-you-feel-tired)
+- [Soal 3 - One letter for destiny](#soal-3---one-letter-for-destiny)
+
+---
+
+| Nama | NRP |
+| --- | --- |
+| Marvelino Davas | 5027241085 |
 
 ---
 
 ## Soal 1 - Kasbon Warga Kampung Durian Runtuh
 
-### Deskripsi
-Program `kasir_muthu.c` mengamankan data buku hutang milik Uncle Muthu secara otomatis menggunakan Sequential Process. Program menggunakan kombinasi `fork()`, `execlp()`, dan `waitpid()` untuk menjalankan empat proses child secara berurutan.
+### Penjelasan
 
-### Cara Kerja
+Program `kasir_muthu.c` dibuat untuk membantu Uncle Muthu mengamankan data buku hutang yang terancam virus. Program menggunakan Sequential Process dengan kombinasi `fork()`, `execlp()`, dan `waitpid()` untuk menjalankan empat child process secara berurutan.
 
-Program membuat empat child process secara berurutan. Setiap child harus selesai sebelum child berikutnya dijalankan menggunakan `waitpid()`.
+**Child 1** membuat folder `brankas_kedai` menggunakan command `mkdir`:
 
-**Child 1** — Membuat folder `brankas_kedai`:
+```c
+execlp("mkdir", "mkdir", "brankas_kedai", NULL);
+```
 
-    execlp("mkdir", "mkdir", "brankas_kedai", NULL);
+**Child 2** menyalin `buku_hutang.csv` ke dalam `brankas_kedai` menggunakan command `cp`:
 
-**Child 2** — Menyalin `buku_hutang.csv` ke dalam `brankas_kedai`:
+```c
+execlp("cp", "cp", "buku_hutang.csv", "brankas_kedai/", NULL);
+```
 
-    execlp("cp", "cp", "buku_hutang.csv", "brankas_kedai/", NULL);
+**Child 3** mencari semua data pelanggan berstatus `"Belum Lunas"` lalu menyimpannya ke `daftar_penunggak.txt`. Menggunakan `bash -c` karena operator `>` adalah fitur shell, bukan fitur `grep` secara langsung:
 
-**Child 3** — Mencari data pelanggan berstatus `"Belum Lunas"` dan menyimpannya ke `daftar_penunggak.txt`:
+```c
+execlp("bash", "bash", "-c", "grep \"Belum Lunas\" brankas_kedai/buku_hutang.csv > brankas_kedai/daftar_penunggak.txt", NULL);
+```
 
-    execlp("bash", "bash", "-c", "grep \"Belum Lunas\" brankas_kedai/buku_hutang.csv > brankas_kedai/daftar_penunggak.txt", NULL);
+**Child 4** mengompres folder `brankas_kedai` menjadi `rahasia_muthu.zip` menggunakan command `zip -r`:
 
-Menggunakan `bash -c` karena operator `>` adalah fitur shell, bukan fitur `grep` langsung.
+```c
+execlp("zip", "zip", "-r", "rahasia_muthu.zip", "brankas_kedai/", NULL);
+```
 
-**Child 4** — Mengompres `brankas_kedai` menjadi `rahasia_muthu.zip`:
+Setiap child harus selesai sebelum child berikutnya dijalankan. Setelah setiap `waitpid()`, program mengecek status keberhasilan menggunakan `WIFEXITED` dan `WEXITSTATUS`. Jika ada child yang gagal, program langsung berhenti dan mencetak pesan error. Jika seluruh proses berhasil, program mencetak pesan sukses.
 
-    execlp("zip", "zip", "-r", "rahasia_muthu.zip", "brankas_kedai/", NULL);
+### Cara Penggunaan
 
-**Error Handling** — Setiap setelah `waitpid()`, program mengecek status keberhasilan child. Jika gagal, program mencetak pesan error dan berhenti:
+```bash
+gcc kasir_muthu.c -o kasir_muthu
+./kasir_muthu
+```
 
-    [ERROR] Aiyaa! Proses gagal, file atau folder tidak ditemukan.
+### Kendala
 
-Jika seluruh proses berhasil, program mencetak:
-
-    [INFO] Fuhh, selamat! Buku hutang dan daftar penagihan berhasil diamankan.
-
-### Cara Menjalankan
-
-    gcc kasir_muthu.c -o kasir_muthu
-    ./kasir_muthu
-
-### Struktur File yang Dihasilkan
-
-    soal_1/
-    ├── buku_hutang.csv
-    ├── kasir_muthu.c
-    ├── rahasia_muthu.zip
-    └── brankas_kedai/
-        ├── buku_hutang.csv
-        └── daftar_penunggak.txt
+Tidak ada kendala.
 
 ---
 
 ## Soal 2 - The world never stops, even when you feel tired
 
-### Deskripsi
-Program `contract_daemon.c` adalah sebuah daemon yang berjalan di background dan memantau keberadaan serta integritas file `contract.txt`. Daemon menulis log ke `work.log` secara berkala selama berjalan.
+### Penjelasan
 
-### Cara Kerja
+Program `contract_daemon.c` adalah daemon yang berjalan di background untuk memantau keberadaan dan integritas file `contract.txt`, serta menulis log ke `work.log` secara berkala.
 
-**Inisialisasi Daemon** — Program mengikuti langkah standar pembuatan daemon:
-1. `fork()` — parent exit, child lanjut di background
-2. `setsid()` — melepas diri dari terminal
-3. `chdir()` — pindah ke direktori kerja
-4. Menutup `stdin`, `stdout`, `stderr`
+**Inisialisasi daemon** mengikuti langkah standar dari template modul: `fork()` untuk memisahkan dari parent, `setsid()` untuk melepas diri dari terminal, `chdir()` untuk pindah ke direktori kerja, lalu menutup `stdin`, `stdout`, dan `stderr`.
 
-**1. Logging berkala** — Setiap 5 detik, daemon menulis ke `work.log` dengan salah satu status acak:
+**Logging berkala** — Setiap 5 detik daemon menulis ke `work.log` dengan salah satu dari tiga status acak: `[awake]`, `[drifting]`, atau `[numbness]`. Contoh output:
 
-    still working… [awake]
-    still working… [drifting]
-    still working… [numbness]
+```
+still working… [awake]
+```
 
-**2. Pembuatan contract.txt** — Saat daemon pertama kali dijalankan, dibuat file `contract.txt` berisi:
+**Pembuatan contract.txt** — Saat pertama kali berjalan, daemon membuat file `contract.txt` berisi kalimat kontrak dan timestamp `created at`.
 
-    "A promise to keep going, even when unseen."
+**Restore jika dihapus** — Daemon mengecek keberadaan file setiap 1 detik menggunakan `fopen()`. Jika file tidak ditemukan, daemon langsung membuat ulang file tersebut dengan label `restored at` beserta timestamp.
 
-    created at: YYYY-MM-DD HH:MM:SS
+**Deteksi perubahan isi** — Jika baris pertama `contract.txt` tidak sesuai dengan kalimat aslinya, daemon mencatat `contract violated.` ke `work.log` lalu merestore isi file.
 
-**3. Restore jika dihapus** — Daemon mengecek keberadaan `contract.txt` setiap 1 detik. Jika file dihapus, daemon membuat ulang file tersebut dengan baris kedua:
+**Pesan saat dihentikan** — Daemon menangkap sinyal `SIGTERM` menggunakan `signal()`. Ketika sinyal diterima, loop berhenti dan daemon menulis pesan terakhir ke `work.log`:
 
-    restored at: <timestamp>
+```
+We really weren't meant to be together
+```
 
-**4. Deteksi perubahan isi** — Jika isi `contract.txt` diubah, daemon menulis `contract violated.` ke `work.log` dan merestore isi file ke kondisi semula.
+### Cara Penggunaan
 
-**5. Pesan saat dihentikan** — Saat daemon menerima sinyal `SIGTERM`, daemon menulis pesan terakhir ke `work.log`:
+```bash
+gcc contract_daemon.c -o contract_daemon
+./contract_daemon
+```
 
-    We really weren't meant to be together
+Untuk menghentikan daemon:
 
-### Cara Menjalankan
+```bash
+ps aux | grep contract_daemon
+kill <PID>
+```
 
-    gcc contract_daemon.c -o contract_daemon
-    ./contract_daemon
+### Kendala
 
-### Cara Menghentikan
-
-    ps aux | grep contract_daemon
-    kill <PID>
+Tidak ada kendala.
 
 ---
 
 ## Soal 3 - One letter for destiny
 
-### Deskripsi
-Program `angel.c` adalah daemon yang berjalan di background dengan nama proses `maya`. Program memiliki tiga mode operasi yang dijalankan melalui argumen command line.
+### Penjelasan
 
-### Cara Kerja
+Program `angel.c` adalah daemon yang berjalan di background dengan nama proses `maya`. Program menyediakan tiga mode operasi yang dijalankan melalui argumen command line.
 
-**Inisialisasi Daemon** — Sama seperti soal 2, mengikuti langkah standar pembuatan daemon. Nama proses diubah menjadi `maya` menggunakan dua cara:
+**Inisialisasi daemon** mengikuti template modul. Nama proses diubah menjadi `maya` menggunakan dua pendekatan: `prctl(PR_SET_NAME, "maya", ...)` untuk mengubah nama di kernel, dan manipulasi `argv[0]` langsung untuk mengubah tampilan di kolom CMD pada `ps aux`. PID daemon disimpan ke `/tmp/angel.pid` untuk keperluan fitur kill.
 
-    prctl(PR_SET_NAME, "maya", 0, 0, 0);  // ubah nama di kernel
-    strcpy(argv[0], "maya");               // ubah tampilan di ps aux
+**Fitur secret** berjalan otomatis di dalam daemon setiap 10 detik. Fitur ini memilih satu kalimat secara acak dari empat kalimat yang tersedia lalu menulisnya ke `LoveLetter.txt`.
 
-**1. Fitur secret** — Dijalankan otomatis di dalam daemon setiap 10 detik. Menulis satu kalimat acak ke `LoveLetter.txt` dari daftar berikut:
-- aku akan fokus pada diriku sendiri
-- aku mencintaimu dari sekarang hingga selamanya
-- aku akan menjauh darimu, hingga takdir mempertemukan kita di versi kita yang terbaik.
-- kalau aku dilahirkan kembali, aku tetap akan terus menyayangimu
+**Fitur surprise** berjalan otomatis setelah secret selesai. Fitur ini membaca isi `LoveLetter.txt`, mengenkripsinya menggunakan algoritma Base64 yang diimplementasikan manual, lalu menuliskan hasil enkripsi kembali ke file yang sama.
 
-**2. Fitur surprise** — Dijalankan otomatis setelah secret. Mengenkripsi isi `LoveLetter.txt` menggunakan Base64.
+**Fitur decrypt** dipanggil secara eksplisit via `./angel -decrypt`. Fitur ini membaca isi `LoveLetter.txt` yang sudah terenkripsi, mendekodenya kembali ke bentuk asli menggunakan tabel Base64, lalu menyimpan hasilnya ke file yang sama.
 
-**3. Fitur decrypt** — Dipanggil secara eksplisit via `./angel -decrypt`. Mendekripsi isi `LoveLetter.txt` kembali ke bentuk aslinya.
+**Fitur kill** dipanggil via `./angel -kill`. Fitur ini membaca PID dari `/tmp/angel.pid` lalu mengirim sinyal `SIGTERM` ke daemon. Jika file PID tidak ditemukan, program menampilkan pesan error bahwa daemon belum berjalan.
 
-**4. Fitur kill** — Dipanggil via `./angel -kill`. Membaca PID daemon dari `/tmp/angel.pid` lalu mengirim `SIGTERM`.
+**Logging** — Seluruh aktivitas dicatat ke `ethereal.log` dengan format:
 
-**5. Logging** — Semua aktivitas dicatat ke `ethereal.log` dengan format:
+```
+[dd:mm:yyyy]-[hh:mm:ss]_nama-proses_STATUS
+```
 
-    [dd:mm:yyyy]-[hh:mm:ss]_nama-proses_STATUS
+Status yang digunakan adalah `RUNNING` saat proses mulai, `SUCCESS` saat berhasil, dan `ERROR` saat terjadi kegagalan.
 
-Status yang digunakan: `RUNNING`, `SUCCESS`, `ERROR`.
+### Cara Penggunaan
 
-### Cara Menjalankan
+```bash
+gcc angel.c -o angel
+./angel           # tampilkan usage
+./angel -daemon   # jalankan daemon (nama proses: maya)
+./angel -decrypt  # decrypt LoveLetter.txt
+./angel -kill     # hentikan daemon
+```
 
-    gcc angel.c -o angel
-    ./angel          # tampilkan usage
-    ./angel -daemon  # jalankan daemon (nama proses: maya)
-    ./angel -decrypt # decrypt LoveLetter.txt
-    ./angel -kill    # hentikan daemon
+### Kendala
 
-### Struktur File yang Dihasilkan
-
-    soal_3/
-    ├── angel.c
-    ├── LoveLetter.txt
-    └── ethereal.log
+Tidak ada kendala.
