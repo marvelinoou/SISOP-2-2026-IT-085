@@ -11,6 +11,7 @@
 #include <time.h>
 #include <signal.h>
 
+
 #define LOVE_LETTER "LoveLetter.txt"
 #define ETHEREAL_LOG "ethereal.log"
 #define PID_FILE "/tmp/angel.pid"
@@ -158,7 +159,7 @@ void do_kill() {
     }
 }
 
-void run_daemon(char *cwd) {
+void run_daemon(int argc, char *argv[]) {
     pid_t pid, sid;
 
     // Fork dari parent
@@ -171,7 +172,7 @@ void run_daemon(char *cwd) {
     sid = setsid();
     if (sid < 0) exit(EXIT_FAILURE);
 
-    if (chdir(cwd) < 0) exit(EXIT_FAILURE);
+    //if (chdir() < 0) exit(EXIT_FAILURE);
 
     // Simpan PID
     FILE *pf = fopen(PID_FILE, "w");
@@ -179,6 +180,10 @@ void run_daemon(char *cwd) {
 
     // Ubah nama proses jadi "maya"
     prctl(PR_SET_NAME, "maya", 0, 0, 0);
+
+    char *m = argv[argc - 1] + strlen(argv[argc - 1]);
+    memset(argv[0], 0, m - argv[0]);
+    strcpy(argv[0], "maya");
 
     close(STDIN_FILENO);
     close(STDOUT_FILENO);
@@ -205,7 +210,7 @@ int main(int argc, char *argv[]) {
     getcwd(cwd, sizeof(cwd));
 
     if (strcmp(argv[1], "-daemon") == 0) {
-        run_daemon(cwd);
+        run_daemon(argc, argv);
     } else if (strcmp(argv[1], "-decrypt") == 0) {
         do_decrypt();
     } else if (strcmp(argv[1], "-kill") == 0) {
