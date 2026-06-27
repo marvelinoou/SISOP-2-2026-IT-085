@@ -8,9 +8,9 @@ Pengerjaan Praktikum Sistem Operasi Modul 2
 
 ---
 
-| Nama | NRP |
-| --- | --- |
-| Marvelino Davas | 5027241085 |
+| No | Nama | NRP |
+| --- | --- | --- |
+| 1 | Marvelino Davas | 5027241085 |
 
 ---
 
@@ -18,40 +18,80 @@ Pengerjaan Praktikum Sistem Operasi Modul 2
 
 ### Penjelasan
 
-Program `kasir_muthu.c` dibuat untuk membantu Uncle Muthu mengamankan data buku hutang yang terancam virus. Program menggunakan Sequential Process dengan kombinasi `fork()`, `execlp()`, dan `waitpid()` untuk menjalankan empat child process secara berurutan.
+Program `kasir_muthu.c` dibuat untuk membantu Uncle Muthu mengamankan data buku hutang yang terancam virus. Program menggunakan Sequential Process dengan kombinasi `fork()`, `execlp()`, dan `waitpid()` untuk menjalankan empat child process secara berurutan. Setiap child harus selesai sebelum child berikutnya dijalankan — parent (Upin) selalu memanggil `waitpid()` setelah setiap `fork()`.
 
-**Child 1** membuat folder `brankas_kedai` menggunakan command `mkdir`:
-
-```c
-execlp("mkdir", "mkdir", "brankas_kedai", NULL);
-```
-
-**Child 2** menyalin `buku_hutang.csv` ke dalam `brankas_kedai` menggunakan command `cp`:
+**Child 1** — Membuat folder `brankas_kedai` menggunakan command `mkdir`:
 
 ```c
-execlp("cp", "cp", "buku_hutang.csv", "brankas_kedai/", NULL);
+pid = fork();
+if (pid == 0) {
+    execlp("mkdir", "mkdir", "brankas_kedai", NULL);
+    exit(1);
+}
+waitpid(pid, &status, 0);
 ```
 
-**Child 3** mencari semua data pelanggan berstatus `"Belum Lunas"` lalu menyimpannya ke `daftar_penunggak.txt`. Menggunakan `bash -c` karena operator `>` adalah fitur shell, bukan fitur `grep` secara langsung:
+**Child 2** — Menyalin `buku_hutang.csv` ke dalam `brankas_kedai` menggunakan command `cp`:
 
 ```c
-execlp("bash", "bash", "-c", "grep \"Belum Lunas\" brankas_kedai/buku_hutang.csv > brankas_kedai/daftar_penunggak.txt", NULL);
+pid = fork();
+if (pid == 0) {
+    execlp("cp", "cp", "buku_hutang.csv", "brankas_kedai/", NULL);
+    exit(1);
+}
+waitpid(pid, &status, 0);
 ```
 
-**Child 4** mengompres folder `brankas_kedai` menjadi `rahasia_muthu.zip` menggunakan command `zip -r`:
+**Child 3** — Mencari semua data pelanggan berstatus `"Belum Lunas"` dan menyimpannya ke `daftar_penunggak.txt`. Menggunakan `bash -c` karena operator `>` adalah fitur shell, bukan fitur `grep` secara langsung:
 
 ```c
-execlp("zip", "zip", "-r", "rahasia_muthu.zip", "brankas_kedai/", NULL);
+pid = fork();
+if (pid == 0) {
+    execlp("bash", "bash", "-c",
+        "grep \"Belum Lunas\" brankas_kedai/buku_hutang.csv > brankas_kedai/daftar_penunggak.txt",
+        NULL);
+    exit(1);
+}
+waitpid(pid, &status, 0);
 ```
 
-Setiap child harus selesai sebelum child berikutnya dijalankan. Setelah setiap `waitpid()`, program mengecek status keberhasilan menggunakan `WIFEXITED` dan `WEXITSTATUS`. Jika ada child yang gagal, program langsung berhenti dan mencetak pesan error. Jika seluruh proses berhasil, program mencetak pesan sukses.
+**Child 4** — Mengompres folder `brankas_kedai` menjadi `rahasia_muthu.zip` menggunakan command `zip -r`:
 
-### Cara Penggunaan
-
-```bash
-gcc kasir_muthu.c -o kasir_muthu
-./kasir_muthu
+```c
+pid = fork();
+if (pid == 0) {
+    execlp("zip", "zip", "-r", "rahasia_muthu.zip", "brankas_kedai/", NULL);
+    exit(1);
+}
+waitpid(pid, &status, 0);
 ```
+
+**Error Handling** — Setelah setiap `waitpid()`, program mengecek status keberhasilan child menggunakan `WIFEXITED` dan `WEXITSTATUS`. Jika gagal, program langsung berhenti:
+
+```c
+if (!(WIFEXITED(status) && WEXITSTATUS(status) == 0)) {
+    printf("[ERROR] Aiyaa! Proses gagal, file atau folder tidak ditemukan.\n");
+    exit(1);
+}
+```
+
+### Output
+
+1. Program berhasil dijalankan
+
+![Output sukses](assets/soal_1/output_sukses.png)
+
+2. Isi folder `brankas_kedai` setelah program berjalan
+
+![Isi brankas](assets/soal_1/isi_brankas.png)
+
+3. Isi `daftar_penunggak.txt`
+
+![Daftar penunggak](assets/soal_1/daftar_penunggak.png)
+
+4. Error handling saat file tidak ditemukan
+
+![Error handling](assets/soal_1/error_handling.png)
 
 ### Kendala
 
@@ -65,39 +105,107 @@ Tidak ada kendala.
 
 Program `contract_daemon.c` adalah daemon yang berjalan di background untuk memantau keberadaan dan integritas file `contract.txt`, serta menulis log ke `work.log` secara berkala.
 
-**Inisialisasi daemon** mengikuti langkah standar dari template modul: `fork()` untuk memisahkan dari parent, `setsid()` untuk melepas diri dari terminal, `chdir()` untuk pindah ke direktori kerja, lalu menutup `stdin`, `stdout`, dan `stderr`.
+**Inisialisasi Daemon** — Program mengikuti langkah standar pembuatan daemon dari template modul: `fork()` untuk memisahkan dari parent, `setsid()` untuk melepas diri dari terminal, `chdir()` untuk pindah ke direktori kerja, lalu menutup `stdin`, `stdout`, dan `stderr`:
 
-**Logging berkala** — Setiap 5 detik daemon menulis ke `work.log` dengan salah satu dari tiga status acak: `[awake]`, `[drifting]`, atau `[numbness]`. Contoh output:
+```c
+pid = fork();
+if (pid < 0) exit(EXIT_FAILURE);
+if (pid > 0) exit(EXIT_SUCCESS);
 
-```
-still working… [awake]
-```
+umask(0);
+sid = setsid();
+if (sid < 0) exit(EXIT_FAILURE);
+if (chdir(cwd) < 0) exit(EXIT_FAILURE);
 
-**Pembuatan contract.txt** — Saat pertama kali berjalan, daemon membuat file `contract.txt` berisi kalimat kontrak dan timestamp `created at`.
-
-**Restore jika dihapus** — Daemon mengecek keberadaan file setiap 1 detik menggunakan `fopen()`. Jika file tidak ditemukan, daemon langsung membuat ulang file tersebut dengan label `restored at` beserta timestamp.
-
-**Deteksi perubahan isi** — Jika baris pertama `contract.txt` tidak sesuai dengan kalimat aslinya, daemon mencatat `contract violated.` ke `work.log` lalu merestore isi file.
-
-**Pesan saat dihentikan** — Daemon menangkap sinyal `SIGTERM` menggunakan `signal()`. Ketika sinyal diterima, loop berhenti dan daemon menulis pesan terakhir ke `work.log`:
-
-```
-We really weren't meant to be together
+close(STDIN_FILENO);
+close(STDOUT_FILENO);
+close(STDERR_FILENO);
 ```
 
-### Cara Penggunaan
+**Pembuatan contract.txt** — Saat pertama kali berjalan, daemon membuat file `contract.txt` berisi kalimat kontrak beserta timestamp `created at`:
 
-```bash
-gcc contract_daemon.c -o contract_daemon
-./contract_daemon
+```c
+void create_contract(const char *label) {
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+    char timestamp[32];
+    strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", t);
+
+    FILE *f = fopen(CONTRACT_FILE, "w");
+    if (f) {
+        fprintf(f, "\"A promise to keep going, even when unseen.\"\n\n%s: %s\n", label, timestamp);
+        fclose(f);
+    }
+}
 ```
 
-Untuk menghentikan daemon:
+**Logging berkala** — Setiap 5 detik daemon menulis ke `work.log` dengan salah satu dari tiga status acak menggunakan `rand() % 3`:
 
-```bash
-ps aux | grep contract_daemon
-kill <PID>
+```c
+if (counter % 5 == 0) {
+    int idx = rand() % 3;
+    char msg[64];
+    snprintf(msg, sizeof(msg), "still working\xe2\x80\xa6 %s", statuses[idx]);
+    write_log(msg);
+}
 ```
+
+**Restore jika dihapus** — Daemon mengecek keberadaan file setiap 1 detik menggunakan `fopen()`. Jika file tidak ditemukan, daemon langsung membuat ulang dengan label `restored at`:
+
+```c
+FILE *f = fopen(CONTRACT_FILE, "r");
+if (!f) {
+    create_contract("restored at");
+}
+```
+
+**Deteksi perubahan isi** — Jika baris pertama `contract.txt` tidak sesuai kalimat aslinya, daemon mencatat `contract violated.` ke `work.log` lalu merestore file:
+
+```c
+char first_line[256];
+fgets(first_line, sizeof(first_line), f);
+fclose(f);
+
+if (strncmp(first_line, "\"A promise to keep going, even when unseen.\"", 44) != 0) {
+    write_log("contract violated.");
+    create_contract("restored at");
+}
+```
+
+**Pesan saat dihentikan** — Daemon menangkap sinyal `SIGTERM` menggunakan `signal()`. Saat sinyal diterima, loop berhenti dan daemon menulis pesan terakhir:
+
+```c
+void handle_sigterm(int sig) {
+    running = 0;
+}
+
+signal(SIGTERM, handle_sigterm);
+
+// setelah loop:
+write_log("We really weren't meant to be together");
+```
+
+### Output
+
+1. `contract.txt` saat pertama kali dibuat
+
+![Contract created](assets/soal_2/contract_created.png)
+
+2. `work.log` berjalan setiap 5 detik
+
+![Work log](assets/soal_2/work_log.png)
+
+3. `contract.txt` direstore setelah dihapus
+
+![Contract restored](assets/soal_2/contract_restored.png)
+
+4. `work.log` mencatat `contract violated.` setelah isi diubah
+
+![Contract violated](assets/soal_2/contract_violated.png)
+
+5. Pesan terakhir di `work.log` setelah daemon dihentikan
+
+![Daemon killed](assets/soal_2/daemon_killed.png)
 
 ### Kendala
 
@@ -109,35 +217,128 @@ Tidak ada kendala.
 
 ### Penjelasan
 
-Program `angel.c` adalah daemon yang berjalan di background dengan nama proses `maya`. Program menyediakan tiga mode operasi yang dijalankan melalui argumen command line.
+Program `angel.c` adalah daemon yang berjalan di background dengan nama proses `maya`. Program menyediakan tiga mode operasi melalui argumen command line: `-daemon`, `-decrypt`, dan `-kill`.
 
-**Inisialisasi daemon** mengikuti template modul. Nama proses diubah menjadi `maya` menggunakan dua pendekatan: `prctl(PR_SET_NAME, "maya", ...)` untuk mengubah nama di kernel, dan manipulasi `argv[0]` langsung untuk mengubah tampilan di kolom CMD pada `ps aux`. PID daemon disimpan ke `/tmp/angel.pid` untuk keperluan fitur kill.
+**Inisialisasi Daemon** — Mengikuti template modul. Nama proses diubah menjadi `maya` menggunakan dua pendekatan sekaligus agar tampil benar di kolom CMD pada `ps aux`:
 
-**Fitur secret** berjalan otomatis di dalam daemon setiap 10 detik. Fitur ini memilih satu kalimat secara acak dari empat kalimat yang tersedia lalu menulisnya ke `LoveLetter.txt`.
+```c
+prctl(PR_SET_NAME, "maya", 0, 0, 0);
 
-**Fitur surprise** berjalan otomatis setelah secret selesai. Fitur ini membaca isi `LoveLetter.txt`, mengenkripsinya menggunakan algoritma Base64 yang diimplementasikan manual, lalu menuliskan hasil enkripsi kembali ke file yang sama.
-
-**Fitur decrypt** dipanggil secara eksplisit via `./angel -decrypt`. Fitur ini membaca isi `LoveLetter.txt` yang sudah terenkripsi, mendekodenya kembali ke bentuk asli menggunakan tabel Base64, lalu menyimpan hasilnya ke file yang sama.
-
-**Fitur kill** dipanggil via `./angel -kill`. Fitur ini membaca PID dari `/tmp/angel.pid` lalu mengirim sinyal `SIGTERM` ke daemon. Jika file PID tidak ditemukan, program menampilkan pesan error bahwa daemon belum berjalan.
-
-**Logging** — Seluruh aktivitas dicatat ke `ethereal.log` dengan format:
-
-```
-[dd:mm:yyyy]-[hh:mm:ss]_nama-proses_STATUS
+char *m = argv[argc - 1] + strlen(argv[argc - 1]);
+memset(argv[0], 0, m - argv[0]);
+strcpy(argv[0], "maya");
 ```
 
-Status yang digunakan adalah `RUNNING` saat proses mulai, `SUCCESS` saat berhasil, dan `ERROR` saat terjadi kegagalan.
+PID daemon disimpan ke `/tmp/angel.pid` untuk keperluan fitur kill:
 
-### Cara Penggunaan
-
-```bash
-gcc angel.c -o angel
-./angel           # tampilkan usage
-./angel -daemon   # jalankan daemon (nama proses: maya)
-./angel -decrypt  # decrypt LoveLetter.txt
-./angel -kill     # hentikan daemon
+```c
+FILE *pf = fopen(PID_FILE, "w");
+if (pf) { fprintf(pf, "%d\n", getpid()); fclose(pf); }
 ```
+
+**Fitur secret** — Berjalan otomatis setiap 10 detik, memilih satu kalimat acak dari empat pilihan lalu menulis ke `LoveLetter.txt`:
+
+```c
+void do_secret() {
+    write_log("secret", "RUNNING");
+    srand(time(NULL));
+    int idx = rand() % 4;
+    FILE *f = fopen(LOVE_LETTER, "w");
+    if (!f) { write_log("secret", "ERROR"); return; }
+    fprintf(f, "%s", sentences[idx]);
+    fclose(f);
+    write_log("secret", "SUCCESS");
+}
+```
+
+**Fitur surprise** — Berjalan otomatis setelah secret selesai, mengenkripsi isi `LoveLetter.txt` menggunakan algoritma Base64 yang diimplementasikan manual:
+
+```c
+void do_surprise() {
+    write_log("surprise", "RUNNING");
+    // baca file → encode base64 → tulis kembali ke file
+    base64_encode(content, fsize, encoded);
+    write_log("surprise", "SUCCESS");
+}
+```
+
+**Fitur decrypt** — Dipanggil eksplisit via `./angel -decrypt`, mendekripsi isi `LoveLetter.txt` kembali ke bentuk asli:
+
+```c
+void do_decrypt() {
+    write_log("decrypt", "RUNNING");
+    // baca file → decode base64 → tulis kembali ke file
+    base64_decode(content, decoded);
+    write_log("decrypt", "SUCCESS");
+}
+```
+
+**Fitur kill** — Dipanggil via `./angel -kill`, membaca PID dari `/tmp/angel.pid` lalu mengirim `SIGTERM`:
+
+```c
+void do_kill() {
+    write_log("kill", "RUNNING");
+    FILE *pf = fopen(PID_FILE, "r");
+    if (!pf) {
+        write_log("kill", "ERROR");
+        printf("Error: daemon belum berjalan.\n");
+        return;
+    }
+    pid_t pid;
+    fscanf(pf, "%d", &pid);
+    fclose(pf);
+    if (kill(pid, SIGTERM) == 0) {
+        remove(PID_FILE);
+        write_log("kill", "SUCCESS");
+    }
+}
+```
+
+**Logging** — Seluruh aktivitas dicatat ke `ethereal.log` dengan format `[dd:mm:yyyy]-[hh:mm:ss]_nama-proses_STATUS`:
+
+```c
+void write_log(const char *process, const char *status) {
+    FILE *f = fopen(ETHEREAL_LOG, "a");
+    if (!f) return;
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+    fprintf(f, "[%02d:%02d:%04d]-[%02d:%02d:%02d]_%s_%s\n",
+        t->tm_mday, t->tm_mon+1, t->tm_year+1900,
+        t->tm_hour, t->tm_min, t->tm_sec,
+        process, status);
+    fclose(f);
+}
+```
+
+### Output
+
+1. Menjalankan `./angel` tanpa argumen menampilkan usage
+
+![Usage](assets/soal_3/usage.png)
+
+2. Proses daemon berjalan dengan nama `maya`
+
+![Proses maya](assets/soal_3/proses_maya.png)
+
+3. Isi `LoveLetter.txt` setelah fitur secret menulis kalimat
+
+![LoveLetter plain](assets/soal_3/loveletter_plain.png)
+
+4. Isi `LoveLetter.txt` setelah fitur surprise mengenkripsi
+
+![LoveLetter encrypted](assets/soal_3/loveletter_encrypted.png)
+
+5. Hasil `./angel -decrypt` dan isi `LoveLetter.txt` setelah didekripsi
+
+![Decrypt](assets/soal_3/decrypt.png)
+
+6. Isi `ethereal.log`
+
+![Ethereal log](assets/soal_3/ethereal_log.png)
+
+7. `./angel -kill` menghentikan daemon
+
+![Kill](assets/soal_3/kill.png)
 
 ### Kendala
 
